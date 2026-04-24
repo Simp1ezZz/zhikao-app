@@ -151,13 +151,14 @@ git commit -m "feat: 初始化Spring Boot后端项目骨架"
 
 **Files:**
 - Create: `backend/src/main/resources/sql/schema.sql`
+- Create: `backend/src/main/resources/sql/init-data.sql`
 - Create: `backend/src/main/java/com/zhikao/entity/User.java`
 - Create: `backend/src/main/java/com/zhikao/entity/Question.java`
 - Create: `backend/src/main/java/com/zhikao/entity/PracticeRecord.java`
 - Create: `backend/src/main/java/com/zhikao/entity/ErrorNote.java`
 - Create: `backend/src/main/java/com/zhikao/entity/Collection.java`
-- Create: `backend/src/main/java/com/zhikao/enums/Subject.java`
-- Create: `backend/src/main/java/com/zhikao/enums/ErrorType.java`
+- Create: `backend/src/main/java/com/zhikao/entity/SubjectConfig.java`
+- Create: `backend/src/main/java/com/zhikao/entity/ErrorTypeConfig.java`
 
 **Step 1: 创建数据库建表SQL**
 
@@ -165,6 +166,28 @@ git commit -m "feat: 初始化Spring Boot后端项目骨架"
 ```sql
 CREATE DATABASE IF NOT EXISTS zhikao DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE zhikao;
+
+-- 科目/模块/知识点 配置表（树形结构）
+CREATE TABLE `subject_config` (
+    `id` BIGINT AUTO_INCREMENT PRIMARY KEY,
+    `name` VARCHAR(50) NOT NULL COMMENT '名称',
+    `parent_id` BIGINT NOT NULL DEFAULT 0 COMMENT '父级ID（0=顶级）',
+    `level` TINYINT NOT NULL COMMENT '层级：1=科目,2=模块,3=知识点',
+    `sort_order` INT NOT NULL DEFAULT 0 COMMENT '排序序号',
+    `enabled` BOOLEAN NOT NULL DEFAULT TRUE COMMENT '是否启用',
+    `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX `idx_parent_id` (`parent_id`),
+    INDEX `idx_level` (`level`)
+);
+
+-- 错因类型 配置表
+CREATE TABLE `error_type_config` (
+    `id` BIGINT AUTO_INCREMENT PRIMARY KEY,
+    `name` VARCHAR(50) NOT NULL COMMENT '错因名称',
+    `sort_order` INT NOT NULL DEFAULT 0 COMMENT '排序序号',
+    `enabled` BOOLEAN NOT NULL DEFAULT TRUE COMMENT '是否启用',
+    `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP
+);
 
 CREATE TABLE `user` (
     `id` BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -181,9 +204,9 @@ CREATE TABLE `user` (
 
 CREATE TABLE `question` (
     `id` BIGINT AUTO_INCREMENT PRIMARY KEY,
-    `subject` VARCHAR(20) NOT NULL COMMENT '科目',
-    `module` VARCHAR(30) NOT NULL COMMENT '模块',
-    `knowledge_point` VARCHAR(50) DEFAULT '' COMMENT '知识点',
+    `subject` VARCHAR(20) NOT NULL COMMENT '科目（关联subject_config level=1）',
+    `module` VARCHAR(30) NOT NULL COMMENT '模块（关联subject_config level=2）',
+    `knowledge_point` VARCHAR(50) DEFAULT '' COMMENT '知识点（关联subject_config level=3）',
     `type` VARCHAR(10) NOT NULL DEFAULT 'SINGLE' COMMENT '题型',
     `difficulty` TINYINT NOT NULL DEFAULT 3 COMMENT '难度1-5',
     `content` TEXT NOT NULL COMMENT '题干',
@@ -215,7 +238,7 @@ CREATE TABLE `error_note` (
     `id` BIGINT AUTO_INCREMENT PRIMARY KEY,
     `user_id` BIGINT NOT NULL,
     `question_id` BIGINT NOT NULL,
-    `error_types` JSON COMMENT '错因选项数组',
+    `error_types` JSON COMMENT '错因选项ID数组（关联error_type_config）',
     `note` VARCHAR(200) DEFAULT '' COMMENT '补充说明',
     `review_count` INT DEFAULT 0,
     `mastered` BOOLEAN DEFAULT FALSE,
@@ -234,7 +257,51 @@ CREATE TABLE `collection` (
 );
 ```
 
-**Step 2: 创建 Entity 类（以 Question 为例，其余类似）**
+**Step 2: 创建初始数据SQL（预置科目和错因类型）**
+
+`sql/init-data.sql`：
+```sql
+USE zhikao;
+
+-- 预置科目（level=1）
+INSERT INTO `subject_config` (`name`, `parent_id`, `level`, `sort_order`) VALUES
+('言语理解与表达', 0, 1, 1),
+('数量关系', 0, 1, 2),
+('判断推理', 0, 1, 3),
+('资料分析', 0, 1, 4),
+('常识判断', 0, 1, 5);
+
+-- 预置模块（level=2），以言语理解为例
+INSERT INTO `subject_config` (`name`, `parent_id`, `level`, `sort_order`) VALUES
+('片段阅读', 1, 2, 1),
+('逻辑填空', 1, 2, 2),
+('语句表达', 1, 2, 3),
+('数学运算', 2, 2, 1),
+('数字推理', 2, 2, 2),
+('图形推理', 3, 2, 1),
+('定义判断', 3, 2, 2),
+('类比推理', 3, 2, 3),
+('逻辑判断', 3, 2, 4),
+('文字材料', 4, 2, 1),
+('表格材料', 4, 2, 2),
+('图形材料', 4, 2, 3),
+('政治常识', 5, 2, 1),
+('法律常识', 5, 2, 2),
+('经济常识', 5, 2, 3);
+
+-- 预置错因类型
+INSERT INTO `error_type_config` (`name`, `sort_order`) VALUES
+('知识盲区', 1),
+('概念混淆', 2),
+('审题失误', 3),
+('计算错误', 4),
+('粗心大意', 5),
+('方法不对', 6),
+('时间不够', 7),
+('猜的', 8);
+```
+
+**Step 3: 创建 Entity 类（以 Question 和 SubjectConfig 为例，其余类似）**
 
 ```java
 package com.zhikao.entity;
@@ -265,59 +332,62 @@ public class Question {
 }
 ```
 
+```java
+package com.zhikao.entity;
+
+import com.baomidou.mybatisplus.annotation.*;
+import lombok.Data;
+import java.time.LocalDateTime;
+
+@Data
+@TableName("subject_config")
+public class SubjectConfig {
+    @TableId(type = IdType.AUTO)
+    private Long id;
+    private String name;
+    private Long parentId;
+    private Integer level;
+    private Integer sortOrder;
+    private Boolean enabled;
+    @TableField(fill = FieldFill.INSERT)
+    private LocalDateTime createdAt;
+}
+```
+
+```java
+package com.zhikao.entity;
+
+import com.baomidou.mybatisplus.annotation.*;
+import lombok.Data;
+import java.time.LocalDateTime;
+
+@Data
+@TableName("error_type_config")
+public class ErrorTypeConfig {
+    @TableId(type = IdType.AUTO)
+    private Long id;
+    private String name;
+    private Integer sortOrder;
+    private Boolean enabled;
+    @TableField(fill = FieldFill.INSERT)
+    private LocalDateTime createdAt;
+}
+```
+
 其余 Entity（User、PracticeRecord、ErrorNote、Collection）按设计文档中的字段对应创建。
 
-**Step 3: 创建枚举类**
-
-```java
-package com.zhikao.enums;
-
-import lombok.Getter;
-import lombok.AllArgsConstructor;
-
-@Getter
-@AllArgsConstructor
-public enum Subject {
-    SPEECH("言语理解与表达"),
-    QUANTITY("数量关系"),
-    JUDGMENT("判断推理"),
-    DATA_ANALYSIS("资料分析"),
-    COMMON_SENSE("常识判断"),
-    ESSAY("申论");
-
-    private final String label;
-}
-```
-
-```java
-package com.zhikao.enums;
-
-public enum ErrorType {
-    KNOWLEDGE_GAP("知识盲区"),
-    CONCEPT_CONFUSION("概念混淆"),
-    MISREAD("审题失误"),
-    CALCULATION("计算错误"),
-    CARELESS("粗心大意"),
-    WRONG_METHOD("方法不对"),
-    TIME_SHORTAGE("时间不够"),
-    GUESS("猜的");
-
-    private final String label;
-    ErrorType(String label) { this.label = label; }
-    public String getLabel() { return label; }
-}
-```
+> **注意：** 不再使用 `Subject.java` 和 `ErrorType.java` 枚举类。科目和错因类型均从数据库 `subject_config` / `error_type_config` 表动态读取。
 
 **Step 4: 执行建表SQL，验证**
 
-Run: `mysql -u root -p < backend/src/main/resources/sql/schema.sql`
-Expected: 数据库和5张表创建成功
+Run: `mysql -u root -p < backend/src/main/resources/sql/schema.sql && mysql -u root -p < backend/src/main/resources/sql/init-data.sql`
+Expected: 数据库和7张表创建成功，初始科目和错因数据导入成功
 
 **Step 5: Commit**
 
 ```bash
-git add backend/src/main/resources/sql/ backend/src/main/java/com/zhikao/entity/ backend/src/main/java/com/zhikao/enums/
-git commit -m "feat: 数据库建表SQL + Entity类定义"
+git add backend/src/main/resources/sql/ backend/src/main/java/com/zhikao/entity/
+git commit -m "feat: 数据库建表SQL + Entity类定义（含科目和错因配置表）"
 ```
 
 ---
@@ -374,13 +444,21 @@ git commit -m "feat: 初始化Vue3管理后台项目(Element Plus + Router)"
 
 ---
 
-## Task 4: 后端 — 题目 CRUD API + Excel 导入
+## Task 4: 后端 — 题目 CRUD + 配置管理 API + Excel 导入
 
 **Files:**
 - Create: `backend/src/main/java/com/zhikao/mapper/QuestionMapper.java`
+- Create: `backend/src/main/java/com/zhikao/mapper/SubjectConfigMapper.java`
+- Create: `backend/src/main/java/com/zhikao/mapper/ErrorTypeConfigMapper.java`
 - Create: `backend/src/main/java/com/zhikao/service/QuestionService.java`
 - Create: `backend/src/main/java/com/zhikao/service/impl/QuestionServiceImpl.java`
+- Create: `backend/src/main/java/com/zhikao/service/SubjectConfigService.java`
+- Create: `backend/src/main/java/com/zhikao/service/impl/SubjectConfigServiceImpl.java`
+- Create: `backend/src/main/java/com/zhikao/service/ErrorTypeConfigService.java`
+- Create: `backend/src/main/java/com/zhikao/service/impl/ErrorTypeConfigServiceImpl.java`
 - Create: `backend/src/main/java/com/zhikao/controller/admin/AdminQuestionController.java`
+- Create: `backend/src/main/java/com/zhikao/controller/admin/AdminSubjectConfigController.java`
+- Create: `backend/src/main/java/com/zhikao/controller/admin/AdminErrorTypeConfigController.java`
 - Create: `backend/src/main/java/com/zhikao/dto/QuestionImportDTO.java`
 - Test: `backend/src/test/java/com/zhikao/service/QuestionServiceTest.java`
 
@@ -395,26 +473,61 @@ Controller 暴露：
 - `DELETE /api/admin/questions/{id}` — 删除
 - `POST /api/admin/questions/import` — Excel批量导入
 
-**Step 3: 实现 Excel 导入**
+**Step 3: 实现科目配置 CRUD API**
+
+`AdminSubjectConfigController` 暴露：
+- `GET /api/admin/subjects` — 科目配置列表（树形结构）
+- `POST /api/admin/subjects` — 新增科目/模块/知识点
+- `PUT /api/admin/subjects/{id}` — 编辑（改名、排序、启用/禁用）
+- `DELETE /api/admin/subjects/{id}` — 删除（级联检查：如有题目引用则阻止删除）
+
+`SubjectConfigService`：
+- `getTree()` — 查询所有启用记录，按 `parent_id` 组装成树形结构返回
+- 支持拖拽排序（更新 `sort_order` 字段）
+
+**Step 4: 实现错因类型 CRUD API**
+
+`AdminErrorTypeConfigController` 暴露：
+- `GET /api/admin/error-types` — 错因类型列表
+- `POST /api/admin/error-types` — 新增
+- `PUT /api/admin/error-types/{id}` — 编辑（改名、排序、启用/禁用）
+- `DELETE /api/admin/error-types/{id}` — 删除
+
+**Step 5: 实现 Excel 导入**
 
 使用 Apache POI 读取 Excel，每行对应一道题，字段映射到 Question Entity。导入时校验必填字段，返回成功/失败条数。
 
-**Step 4: 管理后台前端对接题目CRUD**
+**Step 6: 管理后台前端对接**
 
 `admin/src/views/QuestionManage.vue`：
 - Element Plus Table 展示题目列表
-- 分页 + 按科目/模块筛选
+- 分页 + 按科目/模块筛选（下拉选项从 `/api/admin/subjects` 获取）
 - 编辑弹窗
 - 删除确认
 - Excel上传导入按钮
 
-**Step 5: 端到端验证：通过管理后台导入一批测试题目**
+`admin/src/views/SubjectConfig.vue`：
+- 树形表格（el-tree 或 el-table 树形展示）展示 科目→模块→知识点 三级
+- 支持新增/编辑/删除/排序
+- 启用/禁用开关
 
-**Step 6: Commit**
+`admin/src/views/ErrorTypeConfig.vue`：
+- 简单表格展示错因列表
+- 支持新增/编辑/删除/排序
+- 启用/禁用开关
+
+管理后台侧边栏导航新增：
+- 题目管理
+- 科目配置
+- 错因配置
+
+**Step 7: 端到端验证：通过管理后台导入一批测试题目**
+
+**Step 8: Commit**
 
 ```bash
-git add backend/src/main/java/com/zhikao/mapper/ backend/src/main/java/com/zhikao/service/ backend/src/main/java/com/zhikao/controller/ backend/src/main/java/com/zhikao/dto/ admin/src/
-git commit -m "feat: 题目CRUD + Excel导入(后端+管理后台)"
+git add backend/src/main/java/com/zhikao/ admin/src/
+git commit -m "feat: 题目CRUD + 科目配置 + 错因配置 + Excel导入(后端+管理后台)"
 ```
 
 ---
@@ -483,7 +596,8 @@ git commit -m "feat: 用户注册登录(JWT + Spring Security)"
 `QuestionController` 暴露：
 - `GET /api/questions` — 分页查询，支持 subject/module/difficulty 筛选
 - `GET /api/questions/{id}` — 题目详情（不含answer，防止前端泄露答案）
-- `GET /api/subjects` — 返回科目→模块→知识点的树形结构
+- `GET /api/subjects` — 从 subject_config 表读取科目→模块→知识点树
+- `GET /api/error-types` — 从 error_type_config 表读取启用的错因类型列表
 
 **Step 2: 刷题API — 开始练习**
 
@@ -698,8 +812,8 @@ git commit -m "feat: Flutter Web前端项目(主题+登录注册)"
 
 **Step 1: 题库浏览页**
 
-- 顶部：科目Tab（言语理解/数量关系/判断推理/资料分析/常识判断）
-- 科目下显示模块列表，点击进入题目列表
+- 顶部：科目Tab（从 `/api/subjects` 动态获取科目列表）
+- 科目下显示模块列表（从同接口的树形结构获取），点击进入题目列表
 - 题目列表用卡片展示：题号、题干预览、难度星级、考频标签
 - 底部："开始练习"按钮
 
@@ -715,7 +829,7 @@ git commit -m "feat: Flutter Web前端项目(主题+登录注册)"
 
 **Step 3: 错因标注弹窗**
 
-- 8个预设选项（多选checkbox）
+- 预设选项（从 `/api/error-types` 动态获取，多选checkbox）
 - 补充说明输入框（最多200字）
 - "跳过"和"提交标注"按钮
 

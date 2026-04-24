@@ -72,6 +72,30 @@
 
 ## 数据库核心表设计
 
+### subject_config 表（科目/模块/知识点配置）
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | BIGINT PK | 主键 |
+| name | VARCHAR(50) | 名称（科目名/模块名/知识点名） |
+| parent_id | BIGINT | 父级ID（0表示顶级科目） |
+| level | TINYINT | 层级（1=科目, 2=模块, 3=知识点） |
+| sort_order | INT | 排序序号 |
+| enabled | BOOLEAN | 是否启用 |
+| created_at | DATETIME | 创建时间 |
+
+> 树形结构：科目（如"言语理解"）→ 模块（如"片段阅读"）→ 知识点（如"主旨概括"）
+
+### error_type_config 表（错因类型配置）
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | BIGINT PK | 主键 |
+| name | VARCHAR(50) | 错因名称（如"知识盲区"、"粗心大意"） |
+| sort_order | INT | 排序序号 |
+| enabled | BOOLEAN | 是否启用 |
+| created_at | DATETIME | 创建时间 |
+
+> 管理员可在后台增删改错因选项，用户端自动同步显示
+
 ### user 表
 | 字段 | 类型 | 说明 |
 |------|------|------|
@@ -89,8 +113,8 @@
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | id | BIGINT PK | 主键 |
-| subject | VARCHAR(20) | 科目（言语理解/数量关系/判断推理/资料分析/常识判断/申论） |
-| module | VARCHAR(30) | 模块（如：片段阅读/逻辑填空/数学运算等） |
+| subject | VARCHAR(20) | 科目（关联subject_config，level=1的name） |
+| module | VARCHAR(30) | 模块（关联subject_config，level=2的name） |
 | knowledge_point | VARCHAR(50) | 知识点 |
 | type | VARCHAR(10) | 题型（单选/多选/问答） |
 | difficulty | TINYINT | 难度（1-5） |
@@ -121,7 +145,7 @@
 | id | BIGINT PK | 主键 |
 | user_id | BIGINT FK | 用户ID |
 | question_id | BIGINT FK | 题目ID |
-| error_types | JSON | 错因选项（多选：知识盲区/概念混淆/审题失误/计算错误/粗心大意/方法不对/时间不够/猜的） |
+| error_types | JSON | 错因选项（关联error_type_config，存ID数组，如[1,3,5]） |
 | note | VARCHAR(200) | 用户补充说明 |
 | review_count | INT | 复习次数 |
 | mastered | BOOLEAN | 是否已掌握 |
@@ -149,7 +173,8 @@
 - `GET /api/questions` - 题目列表（支持按科目/考点/难度筛选，分页）
 - `GET /api/questions/{id}` - 题目详情
 - `GET /api/questions/random` - 随机获取练习题
-- `GET /api/subjects` - 科目列表（含模块和知识点树）
+- `GET /api/subjects` - 科目列表（从subject_config读取，含模块和知识点树）
+- `GET /api/error-types` - 错因类型列表（从error_type_config读取）
 
 ### 刷题模块
 - `POST /api/practice/start` - 开始练习（返回一组题目）
@@ -180,6 +205,14 @@
 - `GET /api/admin/questions` - 题目管理列表
 - `PUT /api/admin/questions/{id}` - 编辑题目
 - `DELETE /api/admin/questions/{id}` - 删除题目
+- `GET /api/admin/subjects` - 科目配置列表（树形）
+- `POST /api/admin/subjects` - 新增科目/模块/知识点
+- `PUT /api/admin/subjects/{id}` - 编辑科目配置
+- `DELETE /api/admin/subjects/{id}` - 删除科目配置
+- `GET /api/admin/error-types` - 错因类型列表
+- `POST /api/admin/error-types` - 新增错因类型
+- `PUT /api/admin/error-types/{id}` - 编辑错因类型
+- `DELETE /api/admin/error-types/{id}` - 删除错因类型
 
 ## 开发顺序建议
 
