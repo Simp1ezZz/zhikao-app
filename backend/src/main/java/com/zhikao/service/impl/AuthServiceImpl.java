@@ -31,7 +31,9 @@ public class AuthServiceImpl implements AuthService {
         user.setUsername(request.getUsername());
         user.setPassword(passwordEncoder.encode(request.getPassword()));
         user.setNickname(request.getNickname() != null ? request.getNickname() : request.getUsername());
-        user.setRole("USER");
+        // 第一个注册用户设为 ADMIN，其余为 USER
+        long userCount = userMapper.selectCount(null);
+        user.setRole(userCount == 0 ? "ADMIN" : "USER");
         userMapper.insert(user);
     }
 

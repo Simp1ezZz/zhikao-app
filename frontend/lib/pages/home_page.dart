@@ -125,6 +125,20 @@ class _HomeContentState extends State<_HomeContent> {
               SizedBox(
                 width: double.infinity,
                 height: 56,
+                child: ElevatedButton.icon(
+                  onPressed: () => context.go('/review'),
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('错题复习', style: TextStyle(fontSize: 18)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                height: 56,
                 child: OutlinedButton.icon(
                   onPressed: () => context.go('/exam'),
                   icon: const Icon(Icons.timer),

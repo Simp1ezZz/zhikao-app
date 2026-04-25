@@ -1,3 +1,4 @@
+SET NAMES utf8mb4;
 USE zhikao;
 
 -- 预置科目（level=1）

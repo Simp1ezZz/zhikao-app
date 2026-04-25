@@ -8,8 +8,10 @@ class ApiClient {
   late final Dio dio;
 
   ApiClient._internal() {
+    const baseUrl = String.fromEnvironment('BASE_URL',
+        defaultValue: 'http://localhost:8080/api');
     dio = Dio(BaseOptions(
-      baseUrl: 'http://localhost:8080/api',
+      baseUrl: baseUrl,
       connectTimeout: const Duration(seconds: 10),
       receiveTimeout: const Duration(seconds: 10),
       headers: {'Content-Type': 'application/json'},

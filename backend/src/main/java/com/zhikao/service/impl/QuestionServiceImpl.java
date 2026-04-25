@@ -103,8 +103,13 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question> i
     private String getCellString(Row row, int col) {
         Cell cell = row.getCell(col);
         if (cell == null) return "";
-        cell.setCellType(CellType.STRING);
-        return cell.getStringCellValue().trim();
+        if (cell.getCellType() == CellType.STRING) {
+            return cell.getStringCellValue().trim();
+        }
+        if (cell.getCellType() == CellType.NUMERIC) {
+            return String.valueOf((int) cell.getNumericCellValue());
+        }
+        return cell.toString().trim();
     }
 
     private int getCellInt(Row row, int col, int defaultVal) {

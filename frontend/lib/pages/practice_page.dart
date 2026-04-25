@@ -4,11 +4,14 @@ import 'package:go_router/go_router.dart';
 import '../api/practice_api.dart';
 import '../api/question_api.dart';
 import '../api/collection_api.dart';
+import '../api/error_type_api.dart';
+import '../api/error_note_api.dart';
 
 class PracticePage extends StatefulWidget {
   final String? subject;
   final String? module;
-  const PracticePage({super.key, this.subject, this.module});
+  final bool isReviewMode;
+  const PracticePage({super.key, this.subject, this.module, this.isReviewMode = false});
 
   @override
   State<PracticePage> createState() => _PracticePageState();
@@ -25,6 +28,14 @@ class _PracticePageState extends State<PracticePage> {
   bool _collected = false;
   int _correctCount = 0;
   final Stopwatch _stopwatch = Stopwatch();
+  Map<int, int> _errorNoteIdMap = {};
+
+  // 错因标注
+  List<dynamic> _errorTypes = [];
+  final Set<int> _selectedErrorTypes = {};
+  final TextEditingController _errorNoteCtrl = TextEditingController();
+  int? _errorNoteId;
+  bool _errorTagSaved = false;
 
   @override
   void initState() {
@@ -32,29 +43,68 @@ class _PracticePageState extends State<PracticePage> {
     _startPractice();
   }
 
+  @override
+  void dispose() {
+    _errorNoteCtrl.dispose();
+    super.dispose();
+  }
+
   Future<void> _startPractice() async {
-    try {
-      final resp = await PracticeApi.start(
-        subject: widget.subject,
-        module: widget.module,
-      );
-      if (resp['code'] == 200) {
-        final ids = (resp['data']['questionIds'] as List).cast<int>();
-        setState(() => _questionIds = ids);
-        if (ids.isNotEmpty) await _loadQuestion(ids[0]);
+    if (widget.isReviewMode) {
+      try {
+        final resp = await ErrorNoteApi.getReviewList(count: 10);
+        if (resp['code'] == 200) {
+          final data = resp['data'] as Map<String, dynamic>;
+          final notes = data['notes'] as List? ?? [];
+          final ids = <int>[];
+          _errorNoteIdMap = {};
+          for (var n in notes) {
+            final qid = n['questionId'] as int;
+            ids.add(qid);
+            _errorNoteIdMap[qid] = n['id'] as int;
+          }
+          setState(() => _questionIds = ids);
+          if (ids.isNotEmpty) await _loadQuestion(ids[0]);
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('加载失败: $e')),
+          );
+        }
       }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('加载失败: $e')),
+    } else {
+      try {
+        final resp = await PracticeApi.start(
+          subject: widget.subject,
+          module: widget.module,
         );
+        if (resp['code'] == 200) {
+          final ids = (resp['data']['questionIds'] as List).cast<int>();
+          setState(() => _questionIds = ids);
+          if (ids.isNotEmpty) await _loadQuestion(ids[0]);
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('加载失败: $e')),
+          );
+        }
       }
     }
     setState(() => _loading = false);
   }
 
   Future<void> _loadQuestion(int id) async {
-    setState(() { _selectedAnswer = null; _submitResult = null; });
+    setState(() {
+      _selectedAnswer = null;
+      _submitResult = null;
+      _errorTypes = [];
+      _selectedErrorTypes.clear();
+      _errorNoteCtrl.clear();
+      _errorNoteId = null;
+      _errorTagSaved = false;
+    });
     try {
       final resp = await QuestionApi.getDetail(id);
       if (resp['code'] == 200) {
@@ -85,11 +135,40 @@ class _PracticePageState extends State<PracticePage> {
       );
       if (resp['code'] == 200) {
         final data = resp['data'];
-        if (data['correct'] == true) _correctCount++;
+        if (data['correct'] == true) {
+          _correctCount++;
+        } else {
+          _errorNoteId = data['errorNoteId'];
+          _errorTypes = await ErrorTypeApi.getList();
+        }
+        if (widget.isReviewMode &&
+            data['correct'] == true &&
+            _errorNoteIdMap.containsKey(_currentQuestion!['id'])) {
+          try {
+            await ErrorNoteApi.recordReview(_errorNoteIdMap[_currentQuestion!['id']]!);
+          } catch (_) {}
+        }
         setState(() => _submitResult = data);
       }
     } catch (_) {}
     setState(() => _submitting = false);
+  }
+
+  Future<void> _saveErrorTag() async {
+    if (_errorNoteId == null) return;
+    try {
+      await ErrorNoteApi.updateNote(
+        _errorNoteId!,
+        jsonEncode(_selectedErrorTypes.toList()),
+        _errorNoteCtrl.text,
+      );
+      setState(() => _errorTagSaved = true);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('错因标注已保存')),
+        );
+      }
+    } catch (_) {}
   }
 
   void _next() {
@@ -106,7 +185,7 @@ class _PracticePageState extends State<PracticePage> {
       context: context,
       barrierDismissible: false,
       builder: (_) => AlertDialog(
-        title: const Text('练习完成'),
+        title: Text(widget.isReviewMode ? '复习完成' : '练习完成'),
         content: Text('共 ${_questionIds.length} 题，正确 $_correctCount 题\n'
             '正确率: ${(_questionIds.isEmpty ? 0 : _correctCount * 100 ~/ _questionIds.length)}%'),
         actions: [
@@ -131,18 +210,19 @@ class _PracticePageState extends State<PracticePage> {
   Widget build(BuildContext context) {
     if (_loading) {
       return Scaffold(
-        appBar: AppBar(title: const Text('刷题')),
+        appBar: AppBar(title: Text(widget.isReviewMode ? '错题复习' : '刷题')),
         body: const Center(child: CircularProgressIndicator()),
       );
     }
     if (_questionIds.isEmpty) {
       return Scaffold(
-        appBar: AppBar(title: const Text('刷题')),
+        appBar: AppBar(title: Text(widget.isReviewMode ? '错题复习' : '刷题')),
         body: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('没有找到题目', style: TextStyle(fontSize: 18)),
+              Text(widget.isReviewMode ? '今日没有需要复习的错题' : '没有找到题目',
+                  style: const TextStyle(fontSize: 18)),
               const SizedBox(height: 16),
               ElevatedButton(onPressed: () => context.go('/'), child: const Text('返回')),
             ],
@@ -158,10 +238,13 @@ class _PracticePageState extends State<PracticePage> {
     } catch (_) {}
 
     final bool answered = _submitResult != null;
+    final bool wrong = answered && _submitResult!['correct'] != true;
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('第 ${_currentIndex + 1} / ${_questionIds.length} 题'),
+        title: Text(widget.isReviewMode
+            ? '错题复习 第 ${_currentIndex + 1} / ${_questionIds.length} 题'
+            : '第 ${_currentIndex + 1} / ${_questionIds.length} 题'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => context.go('/'),
@@ -245,6 +328,77 @@ class _PracticePageState extends State<PracticePage> {
                           ),
                         ),
                         const SizedBox(height: 16),
+                        if (wrong) ...[
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.orange.shade50,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.orange.shade200),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Icon(Icons.label_outline, size: 18, color: Colors.orange),
+                                    const SizedBox(width: 6),
+                                    const Text('错因标注',
+                                        style: TextStyle(fontWeight: FontWeight.bold)),
+                                    const Spacer(),
+                                    if (_errorTagSaved)
+                                      const Icon(Icons.check_circle, size: 18, color: Colors.green),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                const Text('选择错因类型：', style: TextStyle(fontSize: 13)),
+                                const SizedBox(height: 8),
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: _errorTypes.map((t) {
+                                    final id = t['id'] as int;
+                                    final selected = _selectedErrorTypes.contains(id);
+                                    return FilterChip(
+                                      label: Text(t['name'] ?? '', style: const TextStyle(fontSize: 13)),
+                                      selected: selected,
+                                      onSelected: _errorTagSaved
+                                          ? null
+                                          : (v) => setState(() {
+                                                if (v) _selectedErrorTypes.add(id);
+                                                else _selectedErrorTypes.remove(id);
+                                              }),
+                                    );
+                                  }).toList(),
+                                ),
+                                const SizedBox(height: 12),
+                                TextField(
+                                  controller: _errorNoteCtrl,
+                                  enabled: !_errorTagSaved,
+                                  maxLines: 2,
+                                  style: const TextStyle(fontSize: 13),
+                                  decoration: const InputDecoration(
+                                    hintText: '补充说明（可选）',
+                                    isDense: true,
+                                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                    border: OutlineInputBorder(),
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                SizedBox(
+                                  width: double.infinity,
+                                  height: 40,
+                                  child: ElevatedButton(
+                                    onPressed: _errorTagSaved ? null : _saveErrorTag,
+                                    child: Text(_errorTagSaved ? '已保存' : '保存错因'),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                        ],
                         SizedBox(
                           width: double.infinity,
                           height: 48,
@@ -313,4 +467,3 @@ class _OptionTile extends StatelessWidget {
     );
   }
 }
-

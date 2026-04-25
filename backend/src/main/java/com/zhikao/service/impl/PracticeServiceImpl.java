@@ -63,12 +63,13 @@ public class PracticeServiceImpl implements PracticeService {
         record.setMode("PRACTICE");
         practiceRecordMapper.insert(record);
 
+        Long errorNoteId = null;
         if (!correct) {
-            Long existing = errorNoteMapper.selectCount(
+            ErrorNote existing = errorNoteMapper.selectOne(
                     new LambdaQueryWrapper<ErrorNote>()
                             .eq(ErrorNote::getUserId, userId)
                             .eq(ErrorNote::getQuestionId, questionId));
-            if (existing == 0) {
+            if (existing == null) {
                 ErrorNote note = new ErrorNote();
                 note.setUserId(userId);
                 note.setQuestionId(questionId);
@@ -77,6 +78,9 @@ public class PracticeServiceImpl implements PracticeService {
                 note.setReviewCount(0);
                 note.setMastered(false);
                 errorNoteMapper.insert(note);
+                errorNoteId = note.getId();
+            } else {
+                errorNoteId = existing.getId();
             }
         }
 
@@ -84,6 +88,7 @@ public class PracticeServiceImpl implements PracticeService {
         result.put("correct", correct);
         result.put("answer", question.getAnswer());
         result.put("analysis", question.getAnalysis());
+        result.put("errorNoteId", errorNoteId);
         return result;
     }
 }

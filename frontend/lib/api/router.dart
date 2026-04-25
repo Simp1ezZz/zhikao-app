@@ -35,5 +35,9 @@ final router = GoRouter(
         subject: state.uri.queryParameters['subject'],
       ),
     ),
+    GoRoute(
+      path: '/review',
+      builder: (_, _) => const PracticePage(isReviewMode: true),
+    ),
   ],
 );

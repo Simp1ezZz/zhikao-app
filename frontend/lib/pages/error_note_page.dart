@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../api/error_note_api.dart';
+import '../api/error_type_api.dart';
 
 class ErrorNotePage extends StatefulWidget {
   const ErrorNotePage({super.key});
@@ -12,6 +13,7 @@ class ErrorNotePage extends StatefulWidget {
 class _ErrorNotePageState extends State<ErrorNotePage> with SingleTickerProviderStateMixin {
   late TabController _tabCtrl;
   List<dynamic> _notes = [];
+  Map<int, String> _errorTypeMap = {};
   int _currentPage = 1;
   int _totalPages = 1;
   bool _loading = false;
@@ -40,19 +42,71 @@ class _ErrorNotePageState extends State<ErrorNotePage> with SingleTickerProvider
   Future<void> _loadNotes() async {
     setState(() => _loading = true);
     try {
-      final resp = await ErrorNoteApi.getList(
-        page: _currentPage,
-        mastered: _masteredFilter,
-      );
-      if (resp['code'] == 200) {
-        final data = resp['data'];
+      final results = await Future.wait([
+        ErrorNoteApi.getList(page: _currentPage, mastered: _masteredFilter),
+        ErrorTypeApi.getList(),
+      ]);
+      final noteResp = results[0] as Map<String, dynamic>;
+      final typeResp = results[1] as List<dynamic>;
+      if (noteResp['code'] == 200) {
+        final data = noteResp['data'];
         setState(() {
           _notes = data['records'] ?? [];
           _totalPages = data['pages'] ?? 1;
         });
       }
+      _errorTypeMap = {
+        for (var t in typeResp) t['id'] as int: t['name'] as String,
+      };
     } catch (_) {}
     setState(() => _loading = false);
+  }
+
+  Widget _buildErrorTags(dynamic note) {
+    List<int> typeIds = [];
+    try {
+      if (note['errorTypes'] is String && note['errorTypes'].toString().isNotEmpty) {
+        final decoded = jsonDecode(note['errorTypes']);
+        if (decoded is List) typeIds = List<int>.from(decoded);
+      }
+    } catch (_) {}
+    final noteText = note['note']?.toString() ?? '';
+    if (typeIds.isEmpty && noteText.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.orange.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.orange.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (typeIds.isNotEmpty) ...[
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              children: typeIds.map((id) {
+                final name = _errorTypeMap[id] ?? '未知';
+                return Chip(
+                  label: Text(name, style: const TextStyle(fontSize: 12)),
+                  backgroundColor: Colors.orange.shade100,
+                  padding: EdgeInsets.zero,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                );
+              }).toList(),
+            ),
+          ],
+          if (noteText.isNotEmpty) ...[
+            if (typeIds.isNotEmpty) const SizedBox(height: 6),
+            Text(noteText, style: const TextStyle(fontSize: 13, color: Colors.black87)),
+          ],
+        ],
+      ),
+    );
   }
 
   Future<void> _toggleMastered(dynamic note) async {
@@ -60,6 +114,96 @@ class _ErrorNotePageState extends State<ErrorNotePage> with SingleTickerProvider
       await ErrorNoteApi.markMastered(note['id'], !(note['mastered'] ?? false));
       _loadNotes();
     } catch (_) {}
+  }
+
+  Future<void> _reviewNote(dynamic note) async {
+    try {
+      await ErrorNoteApi.recordReview(note['id']);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('已标记复习完成')),
+        );
+      }
+      _loadNotes();
+    } catch (_) {}
+  }
+
+  Future<void> _editNote(dynamic note) async {
+    final types = await ErrorTypeApi.getList();
+    if (!mounted) return;
+    List<int> selected = [];
+    try {
+      if (note['errorTypes'] is String) {
+        selected = List<int>.from(jsonDecode(note['errorTypes']));
+      }
+    } catch (_) {}
+    String noteText = note['note'] ?? '';
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('编辑错因'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('错因类型：', style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: types.map((t) {
+                    final id = t['id'] as int;
+                    final selected_ = selected.contains(id);
+                    return FilterChip(
+                      label: Text(t['name'] ?? ''),
+                      selected: selected_,
+                      onSelected: (v) {
+                        setDialogState(() {
+                          if (v) selected.add(id);
+                          else selected.remove(id);
+                        });
+                      },
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 16),
+                const Text('补充说明：', style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                TextField(
+                  maxLines: 2,
+                  controller: TextEditingController(text: noteText),
+                  decoration: const InputDecoration(
+                    hintText: '请输入备注',
+                    border: OutlineInputBorder(),
+                  ),
+                  onChanged: (v) => noteText = v,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('取消'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                await ErrorNoteApi.updateNote(
+                  note['id'],
+                  jsonEncode(selected),
+                  noteText,
+                );
+                if (ctx.mounted) Navigator.pop(ctx);
+                _loadNotes();
+              },
+              child: const Text('保存'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -107,6 +251,16 @@ class _ErrorNotePageState extends State<ErrorNotePage> with SingleTickerProvider
                                         style: const TextStyle(fontSize: 12, color: Colors.grey)),
                                     const SizedBox(width: 8),
                                     IconButton(
+                                      icon: const Icon(Icons.edit_note, color: Colors.blue),
+                                      onPressed: () => _editNote(note),
+                                      tooltip: '编辑错因',
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.refresh, color: Colors.orange),
+                                      onPressed: () => _reviewNote(note),
+                                      tooltip: '复习此题',
+                                    ),
+                                    IconButton(
                                       icon: Icon(
                                         note['mastered'] == true ? Icons.check_circle : Icons.radio_button_unchecked,
                                         color: note['mastered'] == true ? Colors.green : Colors.grey,
@@ -133,6 +287,7 @@ class _ErrorNotePageState extends State<ErrorNotePage> with SingleTickerProvider
                                   Text('解析: ${note['analysis']}',
                                       style: const TextStyle(color: Colors.grey, fontSize: 13)),
                                 ],
+                                _buildErrorTags(note),
                               ],
                             ),
                           ),
