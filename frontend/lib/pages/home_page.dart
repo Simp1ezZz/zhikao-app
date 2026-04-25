@@ -118,6 +118,16 @@ class _HomeContentState extends State<_HomeContent> {
                   label: const Text('快速刷题', style: TextStyle(fontSize: 18)),
                 ),
               ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                height: 56,
+                child: OutlinedButton.icon(
+                  onPressed: () => context.go('/exam'),
+                  icon: const Icon(Icons.timer),
+                  label: const Text('模拟考试', style: TextStyle(fontSize: 18)),
+                ),
+              ),
             ],
           ),
         ),

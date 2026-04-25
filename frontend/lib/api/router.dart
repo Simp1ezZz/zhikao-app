@@ -6,6 +6,7 @@ import '../pages/login_page.dart';
 import '../pages/home_page.dart';
 import '../pages/question_list_page.dart';
 import '../pages/practice_page.dart';
+import '../pages/exam_page.dart';
 
 final router = GoRouter(
   initialLocation: '/',
@@ -26,6 +27,12 @@ final router = GoRouter(
       builder: (_, state) => PracticePage(
         subject: state.uri.queryParameters['subject'],
         module: state.uri.queryParameters['module'],
+      ),
+    ),
+    GoRoute(
+      path: '/exam',
+      builder: (_, state) => ExamPage(
+        subject: state.uri.queryParameters['subject'],
       ),
     ),
   ],
