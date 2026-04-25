@@ -23,6 +23,10 @@
           <el-icon><Warning /></el-icon>
           <span>错因配置</span>
         </el-menu-item>
+        <el-menu-item index="/ai-config">
+          <el-icon><Setting /></el-icon>
+          <span>AI配置</span>
+        </el-menu-item>
       </el-menu>
     </el-aside>
     <el-container>
@@ -38,7 +42,7 @@
 
 <script setup>
 import { useRoute, useRouter } from 'vue-router'
-import { Document, Menu, Warning } from '@element-plus/icons-vue'
+import { Document, Menu, Warning, Setting } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()

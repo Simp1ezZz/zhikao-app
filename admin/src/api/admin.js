@@ -55,3 +55,35 @@ export function updateErrorType(id, data) {
 export function deleteErrorType(id) {
   return api.delete(`/admin/error-types/${id}`)
 }
+
+export function getSystemConfigs() {
+  return api.get('/admin/system-config')
+}
+
+export function addSystemConfig(data) {
+  return api.post('/admin/system-config', data)
+}
+
+export function updateSystemConfig(id, data) {
+  return api.put(`/admin/system-config/${id}`, data)
+}
+
+export function getLlmConfigs() {
+  return api.get('/admin/llm-config')
+}
+
+export function addLlmConfig(data) {
+  return api.post('/admin/llm-config', data)
+}
+
+export function updateLlmConfig(id, data) {
+  return api.put(`/admin/llm-config/${id}`, data)
+}
+
+export function deleteLlmConfig(id) {
+  return api.delete(`/admin/llm-config/${id}`)
+}
+
+export function setActiveLlmConfig(id) {
+  return api.post(`/admin/llm-config/${id}/set-active`)
+}

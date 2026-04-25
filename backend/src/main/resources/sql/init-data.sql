@@ -71,3 +71,10 @@ INSERT INTO `question` (`subject`, `module`, `knowledge_point`, `type`, `difficu
 ('常识判断', '政治常识', '时政热点', 'SINGLE', 2, '党的二十大报告指出，中国式现代化的本质要求包括以下哪项？',
 '{"A": "实现高质量发展", "B": "实现全体人民共同富裕", "C": "发展全过程人民民主", "D": "以上都是"}',
 'D', '党的二十大报告明确指出中国式现代化的本质要求包括：坚持中国共产党领导，坚持中国特色社会主义，实现高质量发展，发展全过程人民民主，丰富人民精神世界，实现全体人民共同富裕等。', '模拟题', 'HIGH', 45);
+
+-- 预置 AI 配置（默认使用环境变量覆盖，此处留空或给演示值）
+INSERT INTO `system_config` (`config_key`, `config_value`, `description`) VALUES
+('llm.api_key', '', 'LLM API Key'),
+('llm.base_url', 'https://api.deepseek.com/v1', 'LLM Base URL'),
+('llm.model', 'deepseek-chat', 'LLM Model'),
+('llm.provider', 'openai', 'LLM Provider: openai/anthropic');

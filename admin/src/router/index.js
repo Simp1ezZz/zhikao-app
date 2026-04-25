@@ -30,6 +30,12 @@ const routes = [
         component: () => import('../views/ErrorTypeConfig.vue'),
         meta: { title: '错因配置' },
       },
+      {
+        path: 'ai-config',
+        name: 'AIConfig',
+        component: () => import('../views/AIConfig.vue'),
+        meta: { title: 'AI配置' },
+      },
     ],
   },
 ]

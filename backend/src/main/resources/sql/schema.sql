@@ -90,3 +90,26 @@ CREATE TABLE `collection` (
     `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
     UNIQUE INDEX `idx_user_question` (`user_id`, `question_id`)
 );
+
+CREATE TABLE `system_config` (
+    `id` BIGINT AUTO_INCREMENT PRIMARY KEY,
+    `config_key` VARCHAR(100) NOT NULL UNIQUE COMMENT '配置键',
+    `config_value` TEXT COMMENT '配置值',
+    `description` VARCHAR(255) DEFAULT '' COMMENT '配置说明',
+    `enabled` BOOLEAN NOT NULL DEFAULT TRUE COMMENT '是否启用',
+    `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+CREATE TABLE `llm_model_config` (
+    `id` BIGINT AUTO_INCREMENT PRIMARY KEY,
+    `name` VARCHAR(50) NOT NULL COMMENT '配置名称',
+    `api_key` VARCHAR(255) NOT NULL COMMENT 'API Key',
+    `base_url` VARCHAR(255) NOT NULL COMMENT 'Base URL',
+    `model` VARCHAR(100) NOT NULL COMMENT '模型名称',
+    `provider` VARCHAR(20) NOT NULL DEFAULT 'openai' COMMENT '协议类型: openai/anthropic',
+    `is_active` BOOLEAN NOT NULL DEFAULT FALSE COMMENT '是否当前使用',
+    `enabled` BOOLEAN NOT NULL DEFAULT TRUE COMMENT '是否启用',
+    `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
