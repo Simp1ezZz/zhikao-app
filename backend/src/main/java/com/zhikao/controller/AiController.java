@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RequestCallback;
 import org.springframework.web.client.ResponseExtractor;
 import org.springframework.web.client.RestTemplate;
-import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
+import jakarta.servlet.http.HttpServletResponse;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
@@ -79,13 +79,17 @@ public class AiController {
 
     // ==================== 流式端点（SSE） ====================
 
-    @GetMapping(value = "/analysis/{questionId}/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public ResponseEntity<StreamingResponseBody> analysisStream(@PathVariable Long questionId) {
+    @GetMapping(value = "/analysis/{questionId}/stream")
+    public void analysisStream(@PathVariable Long questionId, HttpServletResponse response) {
+        response.setContentType("text/event-stream");
+        response.setCharacterEncoding("UTF-8");
+        response.setHeader("Cache-Control", "no-cache");
+        response.setHeader("X-Accel-Buffering", "no");
+
         Question question = questionService.getById(questionId);
         if (question == null) {
-            return ResponseEntity.ok()
-                    .contentType(MediaType.TEXT_EVENT_STREAM)
-                    .body(out -> writeSseEvent(out, "error", "题目不存在"));
+            writeSseEvent(response, "error", "题目不存在");
+            return;
         }
 
         String prompt = buildAnalysisPrompt(question);
@@ -94,33 +98,20 @@ public class AiController {
         Map<String, Object> body = new HashMap<>();
         body.put("message", prompt);
         body.put("history", List.of());
-        return proxyStream(url, body);
+        proxySseStream(url, body, response);
     }
 
-    @PostMapping(value = "/chat/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public ResponseEntity<StreamingResponseBody> chatStream(@RequestBody Map<String, Object> body) {
+    @PostMapping(value = "/chat/stream")
+    public void chatStream(@RequestBody Map<String, Object> body, HttpServletResponse response) {
+        response.setContentType("text/event-stream");
+        response.setCharacterEncoding("UTF-8");
+        response.setHeader("Cache-Control", "no-cache");
+        response.setHeader("X-Accel-Buffering", "no");
         String url = aiServiceUrl + "/api/ai/chat/stream";
-        return proxyStream(url, body);
+        proxySseStream(url, body, response);
     }
 
-    private ResponseEntity<StreamingResponseBody> proxyStream(String targetUrl, Map<String, Object> body) {
-        StreamingResponseBody streamBody = outputStream -> {
-            try {
-                proxySseStream(targetUrl, body, outputStream);
-            } catch (Exception e) {
-                log.error("Proxy stream failed", e);
-                writeSseEvent(outputStream, "error", "AI 服务连接失败: " + e.getMessage());
-            }
-        };
-
-        return ResponseEntity.ok()
-                .contentType(MediaType.TEXT_EVENT_STREAM)
-                .header("Cache-Control", "no-cache")
-                .header("X-Accel-Buffering", "no")
-                .body(streamBody);
-    }
-
-    private void proxySseStream(String targetUrl, Map<String, Object> body, OutputStream outputStream) throws Exception {
+    private void proxySseStream(String targetUrl, Map<String, Object> body, HttpServletResponse response) {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(30000);
         factory.setReadTimeout(300000);
@@ -134,33 +125,39 @@ public class AiController {
                     .write(body, MediaType.APPLICATION_JSON, req);
         };
 
-        ResponseExtractor<Void> responseExtractor = resp -> {
-            try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(resp.getBody(), StandardCharsets.UTF_8))) {
+        try {
+            OutputStream out = response.getOutputStream();
 
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    if (line.startsWith("data: ")) {
-                        String data = line.substring(6);
-                        if ("[DONE]".equals(data)) {
-                            writeSseEvent(outputStream, null, "[DONE]");
-                            return null;
+            ResponseExtractor<Void> responseExtractor = resp -> {
+                try (BufferedReader reader = new BufferedReader(
+                        new InputStreamReader(resp.getBody(), StandardCharsets.UTF_8))) {
+
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        if (line.startsWith("data: ")) {
+                            String data = line.substring(6);
+                            if ("[DONE]".equals(data)) {
+                                writeSseEvent(out, null, "[DONE]");
+                                return null;
+                            }
+                            if (data.startsWith("[ERROR]")) {
+                                writeSseEvent(out, "error", data.substring(7).trim());
+                                return null;
+                            }
+                            writeSseEvent(out, "message", data);
                         }
-                        if (data.startsWith("[ERROR]")) {
-                            writeSseEvent(outputStream, "error", data.substring(7).trim());
-                            return null;
-                        }
-                        writeSseEvent(outputStream, "message", data);
                     }
+                } catch (Exception e) {
+                    log.error("SSE stream read error", e);
+                    writeSseEvent(out, "error", "流读取错误: " + e.getMessage());
                 }
-            } catch (Exception e) {
-                log.error("SSE stream error", e);
-                writeSseEvent(outputStream, "error", "流读取错误: " + e.getMessage());
-            }
-            return null;
-        };
+                return null;
+            };
 
-        streamingTemplate.execute(targetUrl, HttpMethod.POST, requestCallback, responseExtractor);
+            streamingTemplate.execute(targetUrl, HttpMethod.POST, requestCallback, responseExtractor);
+        } catch (Exception e) {
+            log.error("RestTemplate execute failed (likely connection close after stream)", e);
+        }
     }
 
     private void writeSseEvent(OutputStream out, String eventName, String data) {
@@ -169,7 +166,6 @@ public class AiController {
             if (eventName != null && !eventName.isEmpty()) {
                 sb.append("event: ").append(eventName).append("\n");
             }
-            // SSE 规范：多行 data 需要拆分为多个 data: 行
             for (String line : data.split("\n", -1)) {
                 sb.append("data: ").append(line).append("\n");
             }
@@ -178,6 +174,14 @@ public class AiController {
             out.flush();
         } catch (Exception e) {
             log.debug("Write to client failed (client likely disconnected)", e);
+        }
+    }
+
+    private void writeSseEvent(HttpServletResponse response, String eventName, String data) {
+        try {
+            writeSseEvent(response.getOutputStream(), eventName, data);
+        } catch (Exception e) {
+            log.debug("Write to client failed", e);
         }
     }
 
