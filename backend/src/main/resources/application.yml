@@ -22,3 +22,6 @@ mybatis-plus:
 jwt:
   secret: ${JWT_SECRET:zhikao-mvp-secret-key-for-dev-only}
   expiration: 604800000
+
+ai-service:
+  url: ${AI_SERVICE_URL:http://localhost:8000}
