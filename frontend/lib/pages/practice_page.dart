@@ -35,7 +35,6 @@ class _PracticePageState extends State<PracticePage> {
   final Set<int> _selectedErrorTypes = {};
   final TextEditingController _errorNoteCtrl = TextEditingController();
   int? _errorNoteId;
-  bool _errorTagSaved = false;
 
   @override
   void initState() {
@@ -103,7 +102,6 @@ class _PracticePageState extends State<PracticePage> {
       _selectedErrorTypes.clear();
       _errorNoteCtrl.clear();
       _errorNoteId = null;
-      _errorTagSaved = false;
     });
     try {
       final resp = await QuestionApi.getDetail(id);
@@ -162,12 +160,6 @@ class _PracticePageState extends State<PracticePage> {
         jsonEncode(_selectedErrorTypes.toList()),
         _errorNoteCtrl.text,
       );
-      setState(() => _errorTagSaved = true);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('错因标注已保存')),
-        );
-      }
     } catch (_) {}
   }
 
@@ -346,9 +338,6 @@ class _PracticePageState extends State<PracticePage> {
                                     const SizedBox(width: 6),
                                     const Text('错因标注',
                                         style: TextStyle(fontWeight: FontWeight.bold)),
-                                    const Spacer(),
-                                    if (_errorTagSaved)
-                                      const Icon(Icons.check_circle, size: 18, color: Colors.green),
                                   ],
                                 ),
                                 const SizedBox(height: 12),
@@ -363,19 +352,19 @@ class _PracticePageState extends State<PracticePage> {
                                     return FilterChip(
                                       label: Text(t['name'] ?? '', style: const TextStyle(fontSize: 13)),
                                       selected: selected,
-                                      onSelected: _errorTagSaved
-                                          ? null
-                                          : (v) => setState(() {
-                                                if (v) _selectedErrorTypes.add(id);
-                                                else _selectedErrorTypes.remove(id);
-                                              }),
+                                      onSelected: (v) {
+                                        setState(() {
+                                          if (v) _selectedErrorTypes.add(id);
+                                          else _selectedErrorTypes.remove(id);
+                                        });
+                                        _saveErrorTag();
+                                      },
                                     );
                                   }).toList(),
                                 ),
                                 const SizedBox(height: 12),
                                 TextField(
                                   controller: _errorNoteCtrl,
-                                  enabled: !_errorTagSaved,
                                   maxLines: 2,
                                   style: const TextStyle(fontSize: 13),
                                   decoration: const InputDecoration(
@@ -384,15 +373,7 @@ class _PracticePageState extends State<PracticePage> {
                                     contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                                     border: OutlineInputBorder(),
                                   ),
-                                ),
-                                const SizedBox(height: 12),
-                                SizedBox(
-                                  width: double.infinity,
-                                  height: 40,
-                                  child: ElevatedButton(
-                                    onPressed: _errorTagSaved ? null : _saveErrorTag,
-                                    child: Text(_errorTagSaved ? '已保存' : '保存错因'),
-                                  ),
+                                  onChanged: (_) => _saveErrorTag(),
                                 ),
                               ],
                             ),
