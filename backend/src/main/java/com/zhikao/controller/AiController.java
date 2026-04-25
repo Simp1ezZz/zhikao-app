@@ -50,9 +50,13 @@ public class AiController {
 
         try {
             ResponseEntity<Map> resp = restTemplate.postForEntity(url, entity, Map.class);
+            String reply = resp.getBody() != null ? (String) resp.getBody().get("reply") : null;
+            if (reply != null && reply.startsWith("错误：")) {
+                return Result.error(reply);
+            }
             Map<String, Object> result = new HashMap<>();
             result.put("source", "llm");
-            result.put("analysis", resp.getBody() != null ? resp.getBody().get("reply") : null);
+            result.put("analysis", reply);
             return Result.ok(result);
         } catch (Exception e) {
             return Result.error("AI 解析失败: " + e.getMessage());
