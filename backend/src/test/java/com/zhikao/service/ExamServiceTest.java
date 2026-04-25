@@ -60,16 +60,20 @@ class ExamServiceTest {
         Long examId = ((Number) exam.get("examId")).longValue();
         List<Map<String, Object>> questions = (List<Map<String, Object>>) exam.get("questions");
 
+        int expectedCorrect = 0;
         Map<String, String> answers = new HashMap<>();
-        for (int i = 0; i < questions.size(); i++) {
-            String qId = String.valueOf(questions.get(i).get("id"));
-            answers.put(qId, i < 3 ? "A" : "B");
+        for (Map<String, Object> q : questions) {
+            String qId = String.valueOf(q.get("id"));
+            Question dbQ = questionMapper.selectById(Long.valueOf(qId));
+            String answer = dbQ != null ? dbQ.getAnswer() : "A";
+            answers.put(qId, answer);
+            expectedCorrect++;
         }
 
         Map<String, Object> result = examService.submitExam(300L, examId, answers);
         assertEquals(5, result.get("total"));
-        assertEquals(3, result.get("correct"));
-        assertTrue((double) result.get("score") > 0);
+        assertEquals(expectedCorrect, result.get("correct"));
+        assertEquals(100.0, result.get("score"));
     }
 
     @Test
