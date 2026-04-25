@@ -38,8 +38,8 @@ CREATE TABLE `user` (
 
 CREATE TABLE `question` (
     `id` BIGINT AUTO_INCREMENT PRIMARY KEY,
-    `subject` VARCHAR(20) NOT NULL COMMENT '科目（关联subject_config level=1）',
-    `module` VARCHAR(30) NOT NULL COMMENT '模块（关联subject_config level=2）',
+    `subject` VARCHAR(50) NOT NULL COMMENT '科目（关联subject_config level=1）',
+    `module` VARCHAR(50) NOT NULL COMMENT '模块（关联subject_config level=2）',
     `knowledge_point` VARCHAR(50) DEFAULT '' COMMENT '知识点（关联subject_config level=3）',
     `type` VARCHAR(10) NOT NULL DEFAULT 'SINGLE' COMMENT '题型',
     `difficulty` TINYINT NOT NULL DEFAULT 3 COMMENT '难度1-5',

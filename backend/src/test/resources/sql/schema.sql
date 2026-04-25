@@ -31,8 +31,8 @@ CREATE TABLE IF NOT EXISTS `user` (
 
 CREATE TABLE IF NOT EXISTS `question` (
     `id` BIGINT AUTO_INCREMENT PRIMARY KEY,
-    `subject` VARCHAR(20) NOT NULL,
-    `module` VARCHAR(30) NOT NULL,
+    `subject` VARCHAR(50) NOT NULL,
+    `module` VARCHAR(50) NOT NULL,
     `knowledge_point` VARCHAR(50) DEFAULT '',
     `type` VARCHAR(10) NOT NULL DEFAULT 'SINGLE',
     `difficulty` TINYINT NOT NULL DEFAULT 3,

@@ -39,10 +39,11 @@ async def get_analysis(question_id: int):
     else:
         option_text = ""
 
+    option_section = f"选项：\n{option_text}" if option_text else ""
     prompt = f"""请对以下公务员考试题目进行详细解析：
 
 题目：{content}
-{f"选项：\n{option_text}" if option_text else ""}
+{option_section}
 正确答案：{answer}
 
 请从以下角度进行解析：
