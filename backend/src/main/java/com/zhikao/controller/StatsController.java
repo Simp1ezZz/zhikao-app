@@ -28,4 +28,10 @@ public class StatsController {
         Long userId = (Long) authentication.getPrincipal();
         return Result.ok(statsService.getTrend(userId, days));
     }
+
+    @GetMapping("/subjects")
+    public Result<?> subjectStats(Authentication authentication) {
+        Long userId = (Long) authentication.getPrincipal();
+        return Result.ok(statsService.getSubjectStats(userId));
+    }
 }

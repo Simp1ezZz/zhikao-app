@@ -5,6 +5,7 @@ import '../providers/auth_provider.dart';
 import '../api/stats_api.dart';
 import 'question_list_page.dart';
 import 'error_note_page.dart';
+import 'report_page.dart';
 import 'profile_page.dart';
 
 class HomePage extends StatefulWidget {
@@ -24,6 +25,7 @@ class _HomePageState extends State<HomePage> {
       const _HomeContent(),
       const QuestionListPage(),
       const ErrorNotePage(),
+      const ReportPage(),
       const ProfilePage(),
     ];
 
@@ -46,6 +48,7 @@ class _HomePageState extends State<HomePage> {
           NavigationDestination(icon: Icon(Icons.home), label: '首页'),
           NavigationDestination(icon: Icon(Icons.quiz), label: '题库'),
           NavigationDestination(icon: Icon(Icons.error_outline), label: '错题本'),
+          NavigationDestination(icon: Icon(Icons.bar_chart), label: '报告'),
           NavigationDestination(icon: Icon(Icons.person), label: '我的'),
         ],
       ),

@@ -10,4 +10,9 @@ class StatsApi {
     final resp = await api.get('/stats/trend', queryParameters: {'days': days});
     return resp.data;
   }
+
+  static Future<Map<String, dynamic>> getSubjectStats() async {
+    final resp = await api.get('/stats/subjects');
+    return resp.data;
+  }
 }
