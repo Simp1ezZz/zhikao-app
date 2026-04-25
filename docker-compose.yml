@@ -54,6 +54,8 @@ services:
     environment:
       LLM_PROVIDER: ${LLM_PROVIDER:-deepseek}
       LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      LLM_MODEL: ${LLM_MODEL:-}
       REDIS_HOST: redis
       BACKEND_URL: http://backend:8080
     depends_on:
