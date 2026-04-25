@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
+import '../api/stats_api.dart';
 import 'question_list_page.dart';
+import 'error_note_page.dart';
+import 'profile_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -18,10 +21,10 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
     final pages = [
-      _HomeContent(),
+      const _HomeContent(),
       const QuestionListPage(),
-      const Center(child: Text('错题本 - 待实现', style: TextStyle(fontSize: 18))),
-      const Center(child: Text('我的 - 待实现', style: TextStyle(fontSize: 18))),
+      const ErrorNotePage(),
+      const ProfilePage(),
     ];
 
     return Scaffold(
@@ -33,13 +36,6 @@ class _HomePageState extends State<HomePage> {
               padding: const EdgeInsets.symmetric(horizontal: 8),
               child: Center(child: Text(auth.username!)),
             ),
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () async {
-              await auth.logout();
-              if (context.mounted) context.go('/login');
-            },
-          ),
         ],
       ),
       body: pages[_currentIndex],
@@ -57,16 +53,39 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
-class _HomeContent extends StatelessWidget {
+class _HomeContent extends StatefulWidget {
+  const _HomeContent();
+
+  @override
+  State<_HomeContent> createState() => _HomeContentState();
+}
+
+class _HomeContentState extends State<_HomeContent> {
+  Map<String, dynamic>? _stats;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadStats();
+  }
+
+  Future<void> _loadStats() async {
+    try {
+      final resp = await StatsApi.getOverview();
+      if (resp['code'] == 200) {
+        setState(() => _stats = resp['data']);
+      }
+    } catch (_) {}
+  }
+
   @override
   Widget build(BuildContext context) {
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 600),
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: Column(
-            mainAxisSize: MainAxisSize.min,
             children: [
               const Icon(Icons.school, size: 80, color: Colors.blue),
               const SizedBox(height: 16),
@@ -74,6 +93,22 @@ class _HomeContent extends StatelessWidget {
               const SizedBox(height: 8),
               const Text('公考刷题助手，助你高效备考'),
               const SizedBox(height: 32),
+              if (_stats != null)
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      children: [
+                        _StatItem('已练习', '${_stats!['totalPractice'] ?? 0}'),
+                        _StatItem('正确率', '${_stats!['accuracy'] ?? 0}%'),
+                        _StatItem('错题', '${_stats!['errorCount'] ?? 0}'),
+                        _StatItem('收藏', '${_stats!['collectionCount'] ?? 0}'),
+                      ],
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
                 height: 56,
@@ -87,6 +122,23 @@ class _HomeContent extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _StatItem extends StatelessWidget {
+  final String label;
+  final String value;
+  const _StatItem(this.label, this.value);
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Text(value, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 4),
+        Text(label, style: const TextStyle(fontSize: 13, color: Colors.grey)),
+      ],
     );
   }
 }
