@@ -1,8 +1,6 @@
-version: '3.8'
-
 services:
   mysql:
-    image: mysql:9
+    image: mysql:9.7.0
     container_name: zhikao-mysql
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_PASSWORD:-root}
@@ -20,7 +18,7 @@ services:
       retries: 5
 
   redis:
-    image: redis:8-alpine
+    image: redis:8.6.2-alpine
     container_name: zhikao-redis
     ports:
       - "6379:6379"
@@ -62,7 +60,7 @@ services:
         condition: service_healthy
 
   admin:
-    image: node:20-alpine
+    image: node:25.9.0-alpine
     container_name: zhikao-admin
     working_dir: /app
     volumes:
