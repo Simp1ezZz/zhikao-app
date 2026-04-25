@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 import '../api/error_note_api.dart';
 import '../api/error_type_api.dart';
 import '../api/ai_api.dart';
@@ -21,6 +23,9 @@ class _ErrorNotePageState extends State<ErrorNotePage> with SingleTickerProvider
   bool? _masteredFilter;
   Map<int, String?> _aiAnalysisMap = {};
   Set<int> _aiLoadingIds = {};
+  Set<int> _aiStreamingIds = {};
+  Map<int, String?> _aiErrorMap = {};
+  Map<int, StreamSubscription<String>> _aiSubs = {};
 
   @override
   void initState() {
@@ -38,6 +43,10 @@ class _ErrorNotePageState extends State<ErrorNotePage> with SingleTickerProvider
 
   @override
   void dispose() {
+    for (final sub in _aiSubs.values) {
+      sub.cancel();
+    }
+    _aiSubs.clear();
     _tabCtrl.dispose();
     super.dispose();
   }
@@ -67,10 +76,12 @@ class _ErrorNotePageState extends State<ErrorNotePage> with SingleTickerProvider
 
   Widget _buildAiAnalysis(dynamic note) {
     final qid = note['questionId'] as int;
-    final analysis = _aiAnalysisMap[qid];
+    final analysis = _aiAnalysisMap[qid] ?? '';
     final loading = _aiLoadingIds.contains(qid);
+    final streaming = _aiStreamingIds.contains(qid);
+    final error = _aiErrorMap[qid];
 
-    if (loading) {
+    if (loading && !streaming) {
       return const Padding(
         padding: EdgeInsets.only(top: 8),
         child: Row(
@@ -84,7 +95,7 @@ class _ErrorNotePageState extends State<ErrorNotePage> with SingleTickerProvider
       );
     }
 
-    if (analysis != null) {
+    if (streaming || analysis.isNotEmpty) {
       return Container(
         width: double.infinity,
         margin: const EdgeInsets.only(top: 8),
@@ -99,7 +110,37 @@ class _ErrorNotePageState extends State<ErrorNotePage> with SingleTickerProvider
           children: [
             const Text('AI 解析', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
             const SizedBox(height: 4),
-            Text(analysis, style: const TextStyle(fontSize: 13, height: 1.5)),
+            if (error != null)
+              Text(error, style: const TextStyle(fontSize: 13, color: Colors.red))
+            else
+              MarkdownBody(
+                data: analysis,
+                selectable: true,
+                styleSheet: MarkdownStyleSheet(
+                  p: const TextStyle(fontSize: 13, height: 1.5),
+                  h1: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  h2: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                  h3: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                  listBullet: const TextStyle(fontSize: 13),
+                  code: TextStyle(
+                    fontSize: 12,
+                    backgroundColor: Colors.grey.shade200,
+                    fontFamily: 'monospace',
+                  ),
+                  codeblockDecoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+              ),
+            if (streaming)
+              const Padding(
+                padding: EdgeInsets.only(top: 8),
+                child: SizedBox(
+                  width: 16, height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
           ],
         ),
       );
@@ -165,15 +206,39 @@ class _ErrorNotePageState extends State<ErrorNotePage> with SingleTickerProvider
 
   Future<void> _loadAiAnalysis(dynamic note) async {
     final qid = note['questionId'] as int;
-    setState(() => _aiLoadingIds.add(qid));
-    try {
-      final resp = await AiApi.getAnalysis(qid);
-      if (resp['code'] == 200) {
-        final data = resp['data'] as Map<String, dynamic>?;
-        setState(() => _aiAnalysisMap[qid] = data?['analysis']?.toString());
-      }
-    } catch (_) {}
-    setState(() => _aiLoadingIds.remove(qid));
+    setState(() {
+      _aiLoadingIds.add(qid);
+      _aiStreamingIds.add(qid);
+      _aiAnalysisMap[qid] = '';
+      _aiErrorMap.remove(qid);
+    });
+    _aiSubs[qid]?.cancel();
+    _aiSubs[qid] = AiApi.getAnalysisStream(qid).listen(
+      (chunk) {
+        if (mounted) {
+          setState(() {
+            _aiAnalysisMap[qid] = (_aiAnalysisMap[qid] ?? '') + chunk;
+          });
+        }
+      },
+      onError: (e) {
+        if (mounted) {
+          setState(() {
+            _aiErrorMap[qid] = e.toString();
+            _aiStreamingIds.remove(qid);
+            _aiLoadingIds.remove(qid);
+          });
+        }
+      },
+      onDone: () {
+        if (mounted) {
+          setState(() {
+            _aiStreamingIds.remove(qid);
+            _aiLoadingIds.remove(qid);
+          });
+        }
+      },
+    );
   }
 
   Future<void> _toggleMastered(dynamic note) async {

@@ -1,6 +1,7 @@
 from fastapi import APIRouter
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from app.services.llm_service import chat
+from app.services.llm_service import chat, chat_stream
 
 router = APIRouter(prefix="/api/ai", tags=["chat"])
 
@@ -26,3 +27,28 @@ async def chat_endpoint(req: ChatRequest):
 
     reply = chat(messages)
     return {"reply": reply}
+
+
+def _sse_chat_stream(messages: list):
+    for chunk in chat_stream(messages):
+        if chunk.startswith("[ERROR]"):
+            yield f"data: {chunk}\n\n"
+            yield "data: [DONE]\n\n"
+            return
+        yield f"data: {chunk}\n\n"
+    yield "data: [DONE]\n\n"
+
+
+@router.post("/chat/stream")
+async def chat_stream_endpoint(req: ChatRequest):
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    for item in req.history[-10:]:
+        messages.append({"role": "user", "content": item.get("user", "")})
+        messages.append({"role": "assistant", "content": item.get("assistant", "")})
+    messages.append({"role": "user", "content": req.message})
+
+    return StreamingResponse(
+        _sse_chat_stream(messages),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )

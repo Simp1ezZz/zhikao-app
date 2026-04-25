@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:go_router/go_router.dart';
 import '../api/practice_api.dart';
 import '../api/question_api.dart';
@@ -38,8 +40,11 @@ class _PracticePageState extends State<PracticePage> {
   int? _errorNoteId;
 
   // AI 解析
-  String? _aiAnalysis;
+  String _aiAnalysis = '';
   bool _aiLoading = false;
+  bool _aiStreaming = false;
+  String? _aiError;
+  StreamSubscription<String>? _aiSub;
 
   @override
   void initState() {
@@ -49,6 +54,7 @@ class _PracticePageState extends State<PracticePage> {
 
   @override
   void dispose() {
+    _aiSub?.cancel();
     _errorNoteCtrl.dispose();
     super.dispose();
   }
@@ -107,8 +113,12 @@ class _PracticePageState extends State<PracticePage> {
       _selectedErrorTypes.clear();
       _errorNoteCtrl.clear();
       _errorNoteId = null;
-      _aiAnalysis = null;
+      _aiAnalysis = '';
       _aiLoading = false;
+      _aiStreaming = false;
+      _aiError = null;
+      _aiSub?.cancel();
+      _aiSub = null;
     });
     try {
       final resp = await QuestionApi.getDetail(id);
@@ -172,15 +182,35 @@ class _PracticePageState extends State<PracticePage> {
 
   Future<void> _loadAiAnalysis() async {
     if (_currentQuestion == null) return;
-    setState(() => _aiLoading = true);
-    try {
-      final resp = await AiApi.getAnalysis(_currentQuestion!['id']);
-      if (resp['code'] == 200) {
-        final data = resp['data'] as Map<String, dynamic>?;
-        setState(() => _aiAnalysis = data?['analysis']?.toString());
-      }
-    } catch (_) {}
-    setState(() => _aiLoading = false);
+    setState(() {
+      _aiAnalysis = '';
+      _aiLoading = true;
+      _aiStreaming = true;
+      _aiError = null;
+    });
+    _aiSub?.cancel();
+    _aiSub = AiApi.getAnalysisStream(_currentQuestion!['id']).listen(
+      (chunk) {
+        if (mounted) setState(() => _aiAnalysis += chunk);
+      },
+      onError: (e) {
+        if (mounted) {
+          setState(() {
+            _aiError = e.toString();
+            _aiStreaming = false;
+            _aiLoading = false;
+          });
+        }
+      },
+      onDone: () {
+        if (mounted) {
+          setState(() {
+            _aiStreaming = false;
+            _aiLoading = false;
+          });
+        }
+      },
+    );
   }
 
   void _next() {
@@ -337,7 +367,7 @@ class _PracticePageState extends State<PracticePage> {
                                 Text('解析: ${_submitResult!['analysis']}'),
                               ],
                               const SizedBox(height: 12),
-                              if (_aiLoading)
+                              if (_aiLoading && !_aiStreaming) ...[
                                 const Row(
                                   children: [
                                     SizedBox(width: 16, height: 16,
@@ -345,15 +375,44 @@ class _PracticePageState extends State<PracticePage> {
                                     SizedBox(width: 8),
                                     Text('AI 解析中...', style: TextStyle(fontSize: 13, color: Colors.grey)),
                                   ],
-                                )
-                              else if (_aiAnalysis != null) ...[
+                                ),
+                              ] else if (_aiStreaming || _aiAnalysis.isNotEmpty) ...[
                                 const Divider(height: 16),
                                 const Text('AI 解析',
                                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                                 const SizedBox(height: 6),
-                                Text(_aiAnalysis!, style: const TextStyle(fontSize: 13, height: 1.5)),
-                              ]
-                              else
+                                if (_aiError != null)
+                                  Text(_aiError!, style: const TextStyle(fontSize: 13, color: Colors.red))
+                                else
+                                  MarkdownBody(
+                                    data: _aiAnalysis,
+                                    selectable: true,
+                                    styleSheet: MarkdownStyleSheet(
+                                      p: const TextStyle(fontSize: 13, height: 1.5),
+                                      h1: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                      h2: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                                      h3: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                                      listBullet: const TextStyle(fontSize: 13),
+                                      code: TextStyle(
+                                        fontSize: 12,
+                                        backgroundColor: Colors.grey.shade200,
+                                        fontFamily: 'monospace',
+                                      ),
+                                      codeblockDecoration: BoxDecoration(
+                                        color: Colors.grey.shade100,
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                    ),
+                                  ),
+                                if (_aiStreaming)
+                                  const Padding(
+                                    padding: EdgeInsets.only(top: 8),
+                                    child: SizedBox(
+                                      width: 16, height: 16,
+                                      child: CircularProgressIndicator(strokeWidth: 2),
+                                    ),
+                                  ),
+                              ] else
                                 TextButton.icon(
                                   onPressed: _loadAiAnalysis,
                                   icon: const Icon(Icons.auto_awesome, size: 18),
