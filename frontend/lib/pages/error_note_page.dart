@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:markdown/markdown.dart' as md;
 import '../api/error_note_api.dart';
 import '../api/error_type_api.dart';
 import '../api/ai_api.dart';
@@ -116,6 +117,7 @@ class _ErrorNotePageState extends State<ErrorNotePage> with SingleTickerProvider
               MarkdownBody(
                 data: analysis,
                 selectable: true,
+                extensionSet: md.ExtensionSet.gitHubFlavored,
                 styleSheet: MarkdownStyleSheet(
                   p: const TextStyle(fontSize: 13, height: 1.5),
                   h1: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),

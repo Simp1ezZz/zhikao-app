@@ -5,6 +5,7 @@ from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 from app.config import REDIS_HOST, REDIS_PORT, REDIS_PASSWORD, BACKEND_URL
 from app.services.llm_service import chat, chat_stream
+from app.routers.chat import _sse_encode
 
 router = APIRouter(prefix="/api/ai", tags=["analysis"])
 
@@ -75,7 +76,7 @@ def _sse_analysis_stream(messages: list, cache_key: str):
             yield "data: [DONE]\n\n"
             return
         buffer += chunk
-        yield f"data: {chunk}\n\n"
+        yield _sse_encode(chunk)
     redis_client.setex(cache_key, 86400 * 7, buffer)
     yield "data: [DONE]\n\n"
 
@@ -86,7 +87,7 @@ async def get_analysis_stream(question_id: int):
     cached = redis_client.get(cache_key)
     if cached:
         async def cached_stream():
-            yield f"data: {cached}\n\n"
+            yield _sse_encode(cached)
             yield "data: [DONE]\n\n"
         return StreamingResponse(
             cached_stream(),

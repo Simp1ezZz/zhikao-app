@@ -133,9 +133,17 @@ public class AiController {
                         new InputStreamReader(resp.getBody(), StandardCharsets.UTF_8))) {
 
                     String line;
+                    StringBuilder eventData = new StringBuilder();
+                    boolean hasData = false;
                     while ((line = reader.readLine()) != null) {
                         if (line.startsWith("data: ")) {
-                            String data = line.substring(6);
+                            if (hasData) eventData.append('\n');
+                            eventData.append(line.substring(6));
+                            hasData = true;
+                        } else if (line.isEmpty() && hasData) {
+                            String data = eventData.toString();
+                            eventData.setLength(0);
+                            hasData = false;
                             if ("[DONE]".equals(data)) {
                                 writeSseEvent(out, null, "[DONE]");
                                 return null;
@@ -146,6 +154,9 @@ public class AiController {
                             }
                             writeSseEvent(out, "message", data);
                         }
+                    }
+                    if (hasData) {
+                        writeSseEvent(out, "message", eventData.toString());
                     }
                 } catch (Exception e) {
                     log.error("SSE stream read error", e);

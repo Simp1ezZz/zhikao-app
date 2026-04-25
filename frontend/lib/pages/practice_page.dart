@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:markdown/markdown.dart' as md;
 import 'package:go_router/go_router.dart';
 import '../api/practice_api.dart';
 import '../api/question_api.dart';
@@ -387,6 +388,7 @@ class _PracticePageState extends State<PracticePage> {
                                   MarkdownBody(
                                     data: _aiAnalysis,
                                     selectable: true,
+                                    extensionSet: md.ExtensionSet.gitHubFlavored,
                                     styleSheet: MarkdownStyleSheet(
                                       p: const TextStyle(fontSize: 13, height: 1.5),
                                       h1: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),

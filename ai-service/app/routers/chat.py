@@ -29,13 +29,18 @@ async def chat_endpoint(req: ChatRequest):
     return {"reply": reply}
 
 
+def _sse_encode(data: str) -> str:
+    """Encode data as proper SSE, handling embedded newlines."""
+    return ''.join(f"data: {line}\n" for line in data.split('\n')) + '\n'
+
+
 def _sse_chat_stream(messages: list):
     for chunk in chat_stream(messages):
         if chunk.startswith("[ERROR]"):
             yield f"data: {chunk}\n\n"
             yield "data: [DONE]\n\n"
             return
-        yield f"data: {chunk}\n\n"
+        yield _sse_encode(chunk)
     yield "data: [DONE]\n\n"
 
 

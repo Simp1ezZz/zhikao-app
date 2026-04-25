@@ -74,23 +74,28 @@ class AiApi {
           final event = buffer.substring(0, idx);
           buffer = buffer.substring(idx + 2);
 
+          // SSE spec: multiple data: lines are joined with \n
+          final dataLines = <String>[];
           for (final line in event.split('\n')) {
             if (line.startsWith('data: ')) {
-              final data = line.substring(6);
-              if (data == '[DONE]') {
-                if (!controller.isClosed) controller.close();
-                return;
-              }
-              if (data.startsWith('[ERROR]')) {
-                if (!controller.isClosed) {
-                  controller.addError(Exception(data.substring(7).trim()));
-                  controller.close();
-                }
-                return;
-              }
-              controller.add(data);
+              dataLines.add(line.substring(6));
             }
           }
+          if (dataLines.isEmpty) continue;
+
+          final data = dataLines.join('\n');
+          if (data == '[DONE]') {
+            if (!controller.isClosed) controller.close();
+            return;
+          }
+          if (data.startsWith('[ERROR]')) {
+            if (!controller.isClosed) {
+              controller.addError(Exception(data.substring(7).trim()));
+              controller.close();
+            }
+            return;
+          }
+          controller.add(data);
         }
       }
 
