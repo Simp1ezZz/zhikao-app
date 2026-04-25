@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../api/error_note_api.dart';
 import '../api/error_type_api.dart';
+import '../api/ai_api.dart';
 
 class ErrorNotePage extends StatefulWidget {
   const ErrorNotePage({super.key});
@@ -18,6 +19,8 @@ class _ErrorNotePageState extends State<ErrorNotePage> with SingleTickerProvider
   int _totalPages = 1;
   bool _loading = false;
   bool? _masteredFilter;
+  Map<int, String?> _aiAnalysisMap = {};
+  Set<int> _aiLoadingIds = {};
 
   @override
   void initState() {
@@ -60,6 +63,57 @@ class _ErrorNotePageState extends State<ErrorNotePage> with SingleTickerProvider
       };
     } catch (_) {}
     setState(() => _loading = false);
+  }
+
+  Widget _buildAiAnalysis(dynamic note) {
+    final qid = note['questionId'] as int;
+    final analysis = _aiAnalysisMap[qid];
+    final loading = _aiLoadingIds.contains(qid);
+
+    if (loading) {
+      return const Padding(
+        padding: EdgeInsets.only(top: 8),
+        child: Row(
+          children: [
+            SizedBox(width: 16, height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2)),
+            SizedBox(width: 8),
+            Text('AI 解析中...', style: TextStyle(fontSize: 13, color: Colors.grey)),
+          ],
+        ),
+      );
+    }
+
+    if (analysis != null) {
+      return Container(
+        width: double.infinity,
+        margin: const EdgeInsets.only(top: 8),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.blue.shade50,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.blue.shade200),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('AI 解析', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+            const SizedBox(height: 4),
+            Text(analysis, style: const TextStyle(fontSize: 13, height: 1.5)),
+          ],
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: TextButton.icon(
+        onPressed: () => _loadAiAnalysis(note),
+        icon: const Icon(Icons.auto_awesome, size: 18),
+        label: const Text('AI 解析'),
+        style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: Size.zero),
+      ),
+    );
   }
 
   Widget _buildErrorTags(dynamic note) {
@@ -107,6 +161,19 @@ class _ErrorNotePageState extends State<ErrorNotePage> with SingleTickerProvider
         ],
       ),
     );
+  }
+
+  Future<void> _loadAiAnalysis(dynamic note) async {
+    final qid = note['questionId'] as int;
+    setState(() => _aiLoadingIds.add(qid));
+    try {
+      final resp = await AiApi.getAnalysis(qid);
+      if (resp['code'] == 200) {
+        final data = resp['data'] as Map<String, dynamic>?;
+        setState(() => _aiAnalysisMap[qid] = data?['analysis']?.toString());
+      }
+    } catch (_) {}
+    setState(() => _aiLoadingIds.remove(qid));
   }
 
   Future<void> _toggleMastered(dynamic note) async {
@@ -287,6 +354,7 @@ class _ErrorNotePageState extends State<ErrorNotePage> with SingleTickerProvider
                                   Text('解析: ${note['analysis']}',
                                       style: const TextStyle(color: Colors.grey, fontSize: 13)),
                                 ],
+                                _buildAiAnalysis(note),
                                 _buildErrorTags(note),
                               ],
                             ),

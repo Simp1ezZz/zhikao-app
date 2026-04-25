@@ -6,6 +6,7 @@ import '../api/question_api.dart';
 import '../api/collection_api.dart';
 import '../api/error_type_api.dart';
 import '../api/error_note_api.dart';
+import '../api/ai_api.dart';
 
 class PracticePage extends StatefulWidget {
   final String? subject;
@@ -35,6 +36,10 @@ class _PracticePageState extends State<PracticePage> {
   final Set<int> _selectedErrorTypes = {};
   final TextEditingController _errorNoteCtrl = TextEditingController();
   int? _errorNoteId;
+
+  // AI 解析
+  String? _aiAnalysis;
+  bool _aiLoading = false;
 
   @override
   void initState() {
@@ -102,6 +107,8 @@ class _PracticePageState extends State<PracticePage> {
       _selectedErrorTypes.clear();
       _errorNoteCtrl.clear();
       _errorNoteId = null;
+      _aiAnalysis = null;
+      _aiLoading = false;
     });
     try {
       final resp = await QuestionApi.getDetail(id);
@@ -161,6 +168,19 @@ class _PracticePageState extends State<PracticePage> {
         _errorNoteCtrl.text,
       );
     } catch (_) {}
+  }
+
+  Future<void> _loadAiAnalysis() async {
+    if (_currentQuestion == null) return;
+    setState(() => _aiLoading = true);
+    try {
+      final resp = await AiApi.getAnalysis(_currentQuestion!['id']);
+      if (resp['code'] == 200) {
+        final data = resp['data'] as Map<String, dynamic>?;
+        setState(() => _aiAnalysis = data?['analysis']?.toString());
+      }
+    } catch (_) {}
+    setState(() => _aiLoading = false);
   }
 
   void _next() {
@@ -316,6 +336,29 @@ class _PracticePageState extends State<PracticePage> {
                                 const SizedBox(height: 8),
                                 Text('解析: ${_submitResult!['analysis']}'),
                               ],
+                              const SizedBox(height: 12),
+                              if (_aiLoading)
+                                const Row(
+                                  children: [
+                                    SizedBox(width: 16, height: 16,
+                                      child: CircularProgressIndicator(strokeWidth: 2)),
+                                    SizedBox(width: 8),
+                                    Text('AI 解析中...', style: TextStyle(fontSize: 13, color: Colors.grey)),
+                                  ],
+                                )
+                              else if (_aiAnalysis != null) ...[
+                                const Divider(height: 16),
+                                const Text('AI 解析',
+                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                const SizedBox(height: 6),
+                                Text(_aiAnalysis!, style: const TextStyle(fontSize: 13, height: 1.5)),
+                              ]
+                              else
+                                TextButton.icon(
+                                  onPressed: _loadAiAnalysis,
+                                  icon: const Icon(Icons.auto_awesome, size: 18),
+                                  label: const Text('AI 解析'),
+                                ),
                             ],
                           ),
                         ),
